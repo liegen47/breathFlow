@@ -1,94 +1,169 @@
-import * as React from 'react';
-import { View } from 'react-native';
-import Animated, { FadeInUp, FadeOutDown, LayoutAnimationConfig } from 'react-native-reanimated';
-import { Info } from '~/lib/icons/Info';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { Button } from '~/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '~/components/ui/card';
-import { Progress } from '~/components/ui/progress';
-import { Text } from '~/components/ui/text';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
+"use client";
 
-const GITHUB_AVATAR_URI =
-  'https://i.pinimg.com/originals/ef/a2/8d/efa28d18a04e7fa40ed49eeb0ab660db.jpg';
+import * as React from "react";
+import { View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  withTiming,
+  useSharedValue,
+  Easing,
+} from "react-native-reanimated";
+import { Audio } from "expo-av";
+import { Card } from "~/components/ui/card";
+import { Text } from "~/components/ui/text";
+import { Button } from "~/components/ui/button";
+import { Volume2, VolumeX } from "lucide-react-native";
+import { useEffect, useState, useRef } from "react";
 
 export default function Screen() {
-  const [progress, setProgress] = React.useState(78);
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [breathePhase, setBreathePhase] = useState<"inhale" | "exhale">(
+    "inhale"
+  );
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const breatheRef = useRef<NodeJS.Timeout | null>(null);
+  const scale = useSharedValue(1);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
-  function updateProgressValue() {
-    setProgress(Math.floor(Math.random() * 100));
-  }
+  const loadSound = async () => {
+    if (soundRef.current) return;
+    const { sound } = await Audio.Sound.createAsync(
+      require("~/assets/audio/breathing.mp3"),
+      { shouldPlay: false, isLooping: true }
+    );
+    soundRef.current = sound;
+  };
+
+  const playSound = async () => {
+    if (soundRef.current) {
+      await soundRef.current.playAsync();
+    }
+  };
+
+  const stopSound = async () => {
+    if (soundRef.current) {
+      await soundRef.current.stopAsync();
+    }
+  };
+
+  const toggleMute = async () => {
+    setIsMuted((prev) => !prev);
+    if (soundRef.current) {
+      await soundRef.current.setIsMutedAsync(!isMuted);
+    }
+  };
+
+  useEffect(() => {
+    loadSound();
+
+    if (isRunning) {
+      playSound();
+
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            setIsRunning(false);
+            stopSound();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      breatheRef.current = setInterval(() => {
+        setBreathePhase((prev) => {
+          if (prev === "inhale") {
+            scale.value = withTiming(1.2, {
+              duration: 4000,
+              easing: Easing.inOut(Easing.ease),
+            });
+            return "exhale";
+          } else {
+            scale.value = withTiming(1, {
+              duration: 4000,
+              easing: Easing.inOut(Easing.ease),
+            });
+            return "inhale";
+          }
+        });
+      }, 4000);
+    } else {
+      stopSound(); // Stop sound when paused
+    }
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (breatheRef.current) clearInterval(breatheRef.current);
+    };
+  }, [isRunning]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const toggleTimer = () => {
+    setIsRunning(!isRunning);
+  };
+
+  const resetTimer = () => {
+    setIsRunning(false);
+    setTimeLeft(60);
+    setBreathePhase("inhale");
+    scale.value = 1;
+    stopSound();
+  };
+
   return (
-    <View className='flex-1 justify-center items-center gap-5 p-6 bg-secondary/30'>
-      <Card className='w-full max-w-sm p-6 rounded-2xl'>
-        <CardHeader className='items-center'>
-          <Avatar alt="Rick Sanchez's Avatar" className='w-24 h-24'>
-            <AvatarImage source={{ uri: GITHUB_AVATAR_URI }} />
-            <AvatarFallback>
-              <Text>RS</Text>
-            </AvatarFallback>
-          </Avatar>
-          <View className='p-3' />
-          <CardTitle className='pb-2 text-center'>Rick Sanchez</CardTitle>
-          <View className='flex-row'>
-            <CardDescription className='text-base font-semibold'>Scientist</CardDescription>
-            <Tooltip delayDuration={150}>
-              <TooltipTrigger className='px-2 pb-0.5 active:opacity-50'>
-                <Info size={14} strokeWidth={2.5} className='w-4 h-4 text-foreground/70' />
-              </TooltipTrigger>
-              <TooltipContent className='py-2 px-4 shadow'>
-                <Text className='native:text-lg'>Freelance</Text>
-              </TooltipContent>
-            </Tooltip>
-          </View>
-        </CardHeader>
-        <CardContent>
-          <View className='flex-row justify-around gap-3'>
-            <View className='items-center'>
-              <Text className='text-sm text-muted-foreground'>Dimension</Text>
-              <Text className='text-xl font-semibold'>C-137</Text>
-            </View>
-            <View className='items-center'>
-              <Text className='text-sm text-muted-foreground'>Age</Text>
-              <Text className='text-xl font-semibold'>70</Text>
-            </View>
-            <View className='items-center'>
-              <Text className='text-sm text-muted-foreground'>Species</Text>
-              <Text className='text-xl font-semibold'>Human</Text>
-            </View>
-          </View>
-        </CardContent>
-        <CardFooter className='flex-col gap-3 pb-0'>
-          <View className='flex-row items-center overflow-hidden'>
-            <Text className='text-sm text-muted-foreground'>Productivity:</Text>
-            <LayoutAnimationConfig skipEntering>
-              <Animated.View
-                key={progress}
-                entering={FadeInUp}
-                exiting={FadeOutDown}
-                className='w-11 items-center'
-              >
-                <Text className='text-sm font-bold text-sky-600'>{progress}%</Text>
-              </Animated.View>
-            </LayoutAnimationConfig>
-          </View>
-          <Progress value={progress} className='h-2' indicatorClassName='bg-sky-600' />
-          <View />
-          <Button
-            variant='outline'
-            className='shadow shadow-foreground/5'
-            onPress={updateProgressValue}
+    <View className="flex-1 justify-center items-center bg-[#98d5cd] dark:bg-[#111111]">
+      <Card className="w-[90%] max-w-sm p-6 rounded-3xl bg-white/20">
+        <View className="items-center mb-8">
+          <Text className="text-2xl font-bold text-white">
+            {formatTime(timeLeft)}
+          </Text>
+        </View>
+
+        <View className="items-center justify-center mb-8">
+          <Animated.View
+            style={[
+              useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] })),
+            ]}
+            className="items-center justify-center"
           >
-            <Text>Update</Text>
+            <View className="w-40 h-40 rounded-full border-4 border-white/50 items-center justify-center">
+              <Text className="text-xl font-semibold text-white">
+                {breathePhase === "inhale" ? "Inhale" : "Exhale"}
+              </Text>
+            </View>
+          </Animated.View>
+        </View>
+
+        <View className="flex-row justify-between items-center mb-4">
+          <Button variant="ghost" onPress={toggleMute} className="p-2">
+            {isMuted ? (
+              <VolumeX className="w-6 h-6 text-white" />
+            ) : (
+              <Volume2 className="w-6 h-6 text-white" />
+            )}
           </Button>
-        </CardFooter>
+
+          <Button
+            variant="outline"
+            onPress={toggleTimer}
+            className="px-6 py-2 bg-white/20 border-white"
+          >
+            <Text className="text-white font-semibold">
+              {isRunning ? "Pause" : "Start"}
+            </Text>
+          </Button>
+
+          <Button variant="ghost" onPress={resetTimer} className="p-2">
+            <Text className="text-white">Reset</Text>
+          </Button>
+        </View>
       </Card>
     </View>
   );
